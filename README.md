@@ -16,6 +16,9 @@
 - 지역의 경제활동 수준은 고령화 및 인구 변화와 어떤 관계가 있는가?
 - 고령화 수준에 비해 의료·복지·교통 인프라가 부족한 지역은 어디인가?
 - 여러 지표를 종합했을 때 지역은 어떤 유형으로 구분되는가?
+- 생활 인프라 미스매치가 공간적으로 무작위하게 분포하는가?
+- 높은 미스매치 지역이 주변 지역과 함께 공간적으로 군집되는가?
+- K-Means 군집 결과는 초기값 변화에도 안정적으로 재현되는가?
 
 ---
 
@@ -288,7 +291,7 @@ r = 0.901
 r = 0.837
 ```
 
-최종 군집분석 후보 변수:
+최종 군집분석 변수:
 
 ```text
 고령화율_2025
@@ -306,11 +309,13 @@ r = 0.837
 노인천명당_철도역수
 ```
 
+총 11개 변수를 최종 군집분석에 사용했습니다.
+
 ---
 
 ## K-Means 전처리
 
-거리 기반 군집분석의 이상치 영향을 줄이기 위해 분포 왜도가 큰 변수에 Yeo-Johnson 변환을 적용했습니다.
+거리 기반 군집분석에서 분포 왜도가 큰 변수의 영향을 줄이기 위해 절대 왜도 1 이상인 변수에 Yeo-Johnson 변환을 적용했습니다.
 
 변환 대상:
 
@@ -341,6 +346,8 @@ K=4  Silhouette = 0.2418
 
 Silhouette Score만 보면 K=2가 가장 높았으나, 실제 지역 특성 해석력과 프로젝트 목적을 함께 고려하여 **최종 K=3**으로 선정했습니다.
 
+K=3은 일반적인 중간형 지역 외에 고령화·청년유출 지역과 경제활동·청년유입 지역을 별도의 유형으로 구분할 수 있다는 점을 고려했습니다.
+
 최종 군집:
 
 | Cluster | 유형 | 지역 수 |
@@ -353,7 +360,7 @@ Silhouette Score만 보면 K=2가 가장 높았으나, 실제 지역 특성 해�
 
 - 상대적으로 낮은 고령화 수준
 - 청년 이동과 경제활동이 중간 수준
-- 병원·약국·철도 공급 수준도 중간 이상
+- 생활 인프라 공급 수준도 전반적으로 중간 수준
 
 ### Cluster 2 - 고령화_청년유출형
 
@@ -417,13 +424,13 @@ Silhouette Score만 보면 K=2가 가장 높았으나, 실제 지역 특성 해�
 
 ```text
 양수 ↑
-→ 고령화 수요 대비 인프라 공급 부족
+→ 고령화 수요 대비 인프라 공급이 상대적으로 부족한 방향
 
 0 근처
 → 고령화 수요와 인프라 공급 수준이 유사
 
 음수 ↓
-→ 고령화 수요 대비 인프라 공급이 상대적으로 충분
+→ 고령화 수요 대비 인프라 공급이 상대적으로 충분한 방향
 ```
 
 따라서 `미스매치점수_100`은 0~100 범위의 정규화 점수가 아닙니다.
@@ -496,7 +503,7 @@ Silhouette Score만 보면 K=2가 가장 높았으나, 실제 지역 특성 해�
 
 4개 시나리오 모두에서 Top20에 포함된 지역은 **18개**였습니다.
 
-안정적으로 반복 확인된 대표 지역:
+안정적으로 반복 확인된 지역:
 
 ```text
 강원 평창군
@@ -519,13 +526,180 @@ Silhouette Score만 보면 K=2가 가장 높았으나, 실제 지역 특성 해�
 경남 합천군
 ```
 
-이를 통해 인프라 가중치를 변경하더라도 주요 미스매치 지역의 순위가 높은 수준으로 유지됨을 확인했습니다.
+이를 통해 인프라 가중치를 변경하더라도 주요 미스매치 지역의 순위가 높은 수준으로 유지되는 것을 확인했습니다.
+
+---
+
+## 공간 통계 분석
+
+생활 인프라 미스매치 점수가 공간적으로 무작위하게 분포하는지 확인하기 위해 Global Moran’s I와 Local Moran’s I(LISA)를 적용했습니다.
+
+### 공간 가중치 구성
+
+공간 가중치는 기본적으로 **Queen Contiguity**를 사용했습니다.
+
+Queen Contiguity는 행정구역의 경계 또는 꼭짓점이 맞닿은 지역을 서로 이웃으로 정의합니다.
+
+다만 도서 지역 등 경계가 직접 맞닿지 않아 이웃이 없는 지역은 중심점 기준 최근접 지역 1개를 연결하여 공간 가중치를 보완했습니다.
+
+```text
+기존 Queen 기준 island: 8개
+보정 후 island: 0개
+```
+
+최근접 이웃 보완 대상:
+
+```text
+경남 거제시 → 경남 통영시
+경남 남해군 → 경남 사천시
+경북 울릉군 → 경북 울진군
+부산 영도구 → 부산 중구
+인천 강화군 → 경기 김포시
+인천 옹진군 → 인천 강화군
+전남 완도군 → 전남 강진군
+전남 진도군 → 전남 해남군
+```
+
+보정 후 모든 229개 지역이 최소 1개 이상의 공간 이웃을 가지도록 구성했습니다.
+
+### Global Moran’s I
+
+미스매치 점수의 전역 공간 자기상관을 확인했습니다.
+
+```text
+Moran's I = 0.4039
+Expected I = -0.0044
+Permutation p-value = 0.0001
+z-score = 9.1570
+```
+
+Moran’s I가 양수이고 9,999회 permutation 검정에서도 통계적으로 유의하게 나타나, 미스매치 점수가 전국에 무작위하게 분포하기보다는 **유사한 수준의 지역끼리 공간적으로 인접해 나타나는 양의 공간 자기상관**을 확인했습니다.
+
+### Local Moran’s I (LISA)
+
+지역별 공간 군집 유형을 확인하기 위해 Local Moran’s I를 적용했습니다.
+
+```text
+High-High          32개
+Low-Low            37개
+High-Low            7개
+Low-High             5개
+Not Significant    148개
+```
+
+각 유형은 다음과 같이 해석했습니다.
+
+```text
+High-High
+→ 높은 미스매치 지역 주변에도 높은 지역이 위치
+
+Low-Low
+→ 낮은 미스매치 지역 주변에도 낮은 지역이 위치
+
+High-Low
+→ 높은 미스매치 지역이 낮은 지역들 사이에 위치
+
+Low-High
+→ 낮은 미스매치 지역이 높은 지역들 사이에 위치
+```
+
+대표 High-High 지역:
+
+```text
+강원 평창군
+강원 정선군
+경남 산청군
+강원 횡성군
+경북 청송군
+경북 봉화군
+강원 홍천군
+경남 합천군
+전북 장수군
+강원 삼척시
+```
+
+High-High 32개 지역 중 대부분이 `고령화_청년유출형` 군집에 포함되어, 기존 K-Means 군집분석과 공간 통계 분석에서 일관된 지역 패턴을 확인했습니다.
+
+### LISA Cluster Map
+
+![LISA Cluster Map](results/spatial_analysis/02_lisa_cluster_map.png)
+
+---
+
+## K-Means 군집 안정성 검증
+
+K-Means는 초기 중심점 설정에 따라 군집 결과가 달라질 수 있으므로, 최종 군집 수 선택의 안정성을 확인하기 위해 반복 군집화를 수행했습니다.
+
+K=2, K=3, K=4에 대해 `random_state`를 100회 변경하여 군집 결과를 비교했습니다.
+
+```text
+분석 지역: 229개
+분석 변수: 11개
+반복 횟수: 100회
+기준 random_state: 42
+n_init: 20
+평가 지표: Adjusted Rand Index (ARI)
+```
+
+ARI는 두 군집 결과의 구성 유사도를 비교하는 지표로, 군집 번호 자체가 서로 달라도 동일한 지역 구성이면 높은 값을 가집니다.
+
+### 기준 군집 대비 ARI
+
+```text
+K=2
+평균 ARI: 1.0000
+최소 ARI: 1.0000
+ARI >= 0.9 비율: 100%
+
+K=3
+평균 ARI: 0.9563
+중앙값 ARI: 0.9865
+최소 ARI: 0.6037
+ARI >= 0.9 비율: 93%
+
+K=4
+평균 ARI: 0.9342
+중앙값 ARI: 0.9954
+최소 ARI: 0.7468
+ARI >= 0.9 비율: 73%
+```
+
+### Seed 간 Pairwise ARI
+
+기준 seed와의 비교뿐만 아니라 100개 random seed의 모든 조합에 대해 Pairwise ARI를 추가로 계산했습니다.
+
+```text
+K=2
+Pairwise 평균 ARI: 1.0000
+Pairwise 중앙값 ARI: 1.0000
+ARI >= 0.9 비율: 100.0%
+
+K=3
+Pairwise 평균 ARI: 0.9316
+Pairwise 중앙값 ARI: 0.9565
+ARI >= 0.9 비율: 88.1%
+
+K=4
+Pairwise 평균 ARI: 0.9019
+Pairwise 중앙값 ARI: 0.9454
+ARI >= 0.9 비율: 60.0%
+```
+
+K=2가 가장 높은 안정성을 보였으나 지역 특성을 두 집단으로 단순화하는 한계가 있었습니다.
+
+반면 K=3은 높은 군집 안정성을 유지하면서 `일반도시_중간형`, `고령화_청년유출형`, `경제활동_청년유입형`을 구분할 수 있었습니다.
+
+따라서 Silhouette Score, 군집 해석 가능성, 반복 군집화 안정성을 함께 고려하여 **K=3을 최종 군집 수로 유지**했습니다.
+
+### 군집 안정성 시각화
+
+![K-Means 군집 안정성](results/cluster_stability/01_ari_stability_boxplot.png)
 
 ---
 
 ## 시각화
 
-최종 시각화는 생활 인프라 비교, 군집 지도, 미스매치 지도로 구성했습니다.
+최종 시각화는 생활 인프라 비교, 지역 유형, 미스매치, 공간 통계 결과로 구성했습니다.
 
 ### 생활 인프라 시각화
 
@@ -556,11 +730,15 @@ results/visualization/infrastructure/
 
 ![우선 검토 지역 지도](results/visualization/mismatch_map/priority_regions_map.png)
 
-지도 시각화에는 SGIS 2025년 2분기 시군구 행정경계를 사용했습니다.
+### LISA 공간 군집 지도
 
-분석 기준으로 경계를 통합하여 최종 **229개 분석지역과 229/229 매칭**을 확인했습니다.
+![LISA 공간 군집 지도](results/spatial_analysis/02_lisa_cluster_map.png)
 
-※ 행정경계 Shapefile은 파일 용량으로 인해 저장소에 포함하지 않았습니다.
+지도 시각화와 공간 통계 분석에는 SGIS 2025년 2분기 시군구 행정경계를 사용했습니다.
+
+원본 252개 경계를 분석 기준에 맞게 통합하여 최종 **229개 분석지역과 229/229 매칭**을 확인했습니다.
+
+※ 행정경계 Shapefile은 파일 용량으로 인해 GitHub 저장소에 포함하지 않았습니다.
 
 ---
 
@@ -571,22 +749,34 @@ results/visualization/infrastructure/
 - 고령화가 빠르게 진행되는 지역일수록 청년 순유출이 크게 나타나는 경향 확인
 - 고령화·청년유출형 군집에서 생활 인프라 미스매치가 상대적으로 크게 나타남
 - 미스매치 상위 20개 지역이 모두 고령화·청년유출형 군집에 포함
-- 고령지역이라도 모든 인프라가 동일하게 부족한 것은 아님
-- 복지시설·버스정류장은 상대적으로 높은 반면 약국·철도는 낮은 지역 구조 확인
+- 고령지역이라도 모든 인프라가 동일하게 부족한 것은 아니며, 복지시설·버스정류장과 의료·철도 인프라 사이의 공급 구조 차이 확인
 - 고령화 수요 상위 25%이면서 인프라 공급 하위 50%인 우선 검토 지역 36개 도출
 - 4개 가중치 시나리오 모두에서 반복 확인된 안정적 핵심 미스매치 지역 18개 도출
 - 민감도 분석에서 최소 Spearman 순위 상관계수 0.9903, Top20 최소 중복률 90% 확인
+- Global Moran’s I = 0.4039, p = 0.0001로 미스매치 점수의 유의한 양의 공간 자기상관 확인
+- LISA 분석에서 High-High 32개, Low-Low 37개 지역 확인
+- High-High 지역은 대부분 고령화·청년유출형 군집에서 나타나 지역 유형과 공간적 미스매치 군집 간 연결 확인
+- K=3은 100회 반복 분석에서 기준 군집 대비 평균 ARI 0.9563, ARI 0.9 이상 비율 93% 확인
+- K=3의 Seed 간 Pairwise ARI도 평균 0.9316으로 나타나 초기화 변화에도 높은 군집 재현성 확인
 
 ---
 
 ## 해석상 주의사항
 
 - 상관관계는 인과관계를 의미하지 않습니다.
+- 생활 인프라 지표는 65세 이상 인구를 분모로 사용하므로 변수 간 관계 해석 시 분모 구조의 영향을 고려해야 합니다.
 - 미스매치 점수는 229개 분석지역 내 상대적 비교를 위한 지표입니다.
+- `미스매치점수_100`은 0~100 범위의 절대 점수가 아닌 signed score입니다.
 - 본 결과를 절대적인 지역 취약성 판정 기준으로 사용할 수 없습니다.
-- 생활 인프라 지표는 시설 수를 기반으로 하므로 실제 이동시간, 서비스 품질, 시설 규모 등은 직접 반영하지 않습니다.
+- 우선 검토 지역 36개는 분석 목적에 따라 설정한 상대적 기준으로, 공식적인 취약지역 지정 기준이 아닙니다.
+- 생활 인프라 지표는 시설 수를 기반으로 하므로 실제 이동시간, 접근성, 서비스 품질, 시설 규모 등은 직접 반영하지 않습니다.
 - 철도역이 없는 지역이 많아 철도 지표의 분포가 비대칭적일 수 있습니다.
-- 강원 고성군 버스정류장 값은 원자료 부재로 분석 단계에서 강원 지역 중앙값으로 보완했습니다.
+- 강원 고성군 버스정류장 값은 원자료 부재로 원본에서는 결측값으로 유지했으며, 군집 및 미스매치 분석 단계에서 강원 지역 중앙값으로 보완했습니다.
+- Moran’s I와 LISA 결과는 사용한 공간 가중치 구조에 영향을 받을 수 있습니다.
+- 공간 통계 분석에서는 Queen Contiguity를 기본으로 하고 이웃이 없는 도서 지역만 중심점 기준 최근접 이웃으로 보완했습니다.
+- LISA의 High-High는 절대적으로 미스매치 점수가 가장 높은 지역을 의미하는 것이 아니라, 주변 지역과 함께 상대적으로 높은 값이 공간적으로 군집된 지역을 의미합니다.
+- 군집 안정성 검증은 초기 중심점 변화에 대한 안정성을 확인한 것으로, 다른 변수 구성이나 다른 군집 알고리즘에서도 동일한 결과를 보장하는 것은 아닙니다.
+- PCA 2차원 시각화는 군집 구조를 시각적으로 확인하기 위한 보조 분석이며 전체 변수 정보를 모두 설명하지 않습니다.
 
 ---
 
@@ -597,6 +787,7 @@ AGING-IMPACT/
 │
 ├─ data/
 │  ├─ raw/
+│  │  ├─ boundary/
 │  │  ├─ business/
 │  │  ├─ census_2024/
 │  │  ├─ employee/
@@ -633,6 +824,8 @@ AGING-IMPACT/
 │  ├─ mismatch_analysis/
 │  ├─ mismatch_sensitivity/
 │  ├─ final_summary/
+│  ├─ spatial_analysis/
+│  ├─ cluster_stability/
 │  └─ visualization/
 │     ├─ infrastructure/
 │     ├─ cluster_map/
@@ -665,6 +858,8 @@ AGING-IMPACT/
 │  ├─ 24_mismatch_analysis.py
 │  ├─ 25_mismatch_sensitivity.py
 │  ├─ 26_final_summary.py
+│  ├─ 27_spatial_autocorrelation.py
+│  ├─ 28_cluster_stability.py
 │  │
 │  └─ visualization/
 │     ├─ viz_infrastructure.py
@@ -675,6 +870,8 @@ AGING-IMPACT/
 ├─ requirements.txt
 └─ README.md
 ```
+
+※ `data/raw/boundary/`의 SGIS Shapefile은 파일 용량으로 인해 GitHub 저장소에 포함하지 않습니다.
 
 ---
 
@@ -687,7 +884,7 @@ Windows PowerShell 기준:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ---
@@ -721,7 +918,7 @@ python .\src\16_welfare.py
 python .\src\17_merge_b.py
 ```
 
-### A+B 최종 분석
+### A+B 통합 및 최종 분석
 
 ```powershell
 python .\src\18_merge_ab.py
@@ -733,6 +930,8 @@ python .\src\23_final_kmeans.py
 python .\src\24_mismatch_analysis.py
 python .\src\25_mismatch_sensitivity.py
 python .\src\26_final_summary.py
+python .\src\27_spatial_autocorrelation.py
+python .\src\28_cluster_stability.py
 ```
 
 ### 시각화
@@ -743,7 +942,17 @@ python .\src\visualization\viz_cluster_map.py
 python .\src\visualization\viz_mismatch_map.py
 ```
 
-※ 지도 코드를 재실행하려면 별도의 시군구 행정경계 Shapefile이 필요합니다.
+※ `27_spatial_autocorrelation.py` 및 지도 시각화 코드를 재실행하려면 `data/raw/boundary/`에 SGIS 2025년 2분기 시군구 행정경계 Shapefile이 필요합니다.
+
+필요한 Shapefile 구성 예시:
+
+```text
+bnd_sigungu_00_2025_2Q.shp
+bnd_sigungu_00_2025_2Q.shx
+bnd_sigungu_00_2025_2Q.dbf
+bnd_sigungu_00_2025_2Q.prj
+bnd_sigungu_00_2025_2Q.cpg
+```
 
 ---
 
@@ -760,6 +969,8 @@ results/ab_merge/ab_dataset.csv
 ```text
 results/final_kmeans/final_cluster_assignments.csv
 results/final_kmeans/cluster_for_visualization.csv
+results/final_kmeans/final_cluster_summary.csv
+results/final_kmeans/final_cluster_profile.png
 ```
 
 ### 미스매치 분석 결과
@@ -778,6 +989,36 @@ results/mismatch_sensitivity/scenario_rank_correlations.csv
 results/mismatch_sensitivity/top20_overlap.csv
 ```
 
+### 공간 통계 분석 결과
+
+```text
+results/spatial_analysis/01_moran_scatterplot.png
+results/spatial_analysis/02_lisa_cluster_map.png
+results/spatial_analysis/03_moran_permutation_distribution.png
+
+results/spatial_analysis/lisa_results.csv
+results/spatial_analysis/high_high_regions.csv
+results/spatial_analysis/island_knn_links.csv
+results/spatial_analysis/moran_scatter_data.csv
+
+results/spatial_analysis/spatial_analysis_summary.txt
+```
+
+### 군집 안정성 검증 결과
+
+```text
+results/cluster_stability/01_ari_stability_boxplot.png
+results/cluster_stability/02_mean_ari_by_k.png
+results/cluster_stability/03_pairwise_ari_by_k.png
+
+results/cluster_stability/stability_runs.csv
+results/cluster_stability/stability_summary_reference.csv
+results/cluster_stability/pairwise_ari.csv
+results/cluster_stability/stability_summary_pairwise.csv
+
+results/cluster_stability/cluster_stability_summary.txt
+```
+
 ### 최종 요약
 
 ```text
@@ -791,7 +1032,9 @@ results/final_summary/FINAL_ANALYSIS_SUMMARY.txt
 ### 시각화 결과
 
 ```text
-results/visualization/
+results/visualization/infrastructure/
+results/visualization/cluster_map/
+results/visualization/mismatch_map/
 ```
 
 ---
@@ -804,6 +1047,7 @@ results/visualization/
 - Matplotlib
 - Scikit-learn
 - GeoPandas
+- PySAL (`libpysal`, `esda`)
 - Folium
 - OpenPyXL
 - pdfplumber
@@ -844,9 +1088,14 @@ results/visualization/
 - [x] 군집 특성 해석
 - [x] 생활 인프라 미스매치 분석
 - [x] 미스매치 민감도 분석
+- [x] Global Moran’s I 공간 자기상관 분석
+- [x] Local Moran’s I(LISA) 공간 군집 분석
+- [x] 도서 지역 공간 가중치 보완
+- [x] K-Means 군집 안정성 검증
 - [x] 군집 지도 시각화
 - [x] 미스매치 지도 시각화
 - [x] 우선 검토 지역 시각화
+- [x] LISA 군집 지도 시각화
 - [x] 최종 결과 요약
 
 ---
